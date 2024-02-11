@@ -3,6 +3,7 @@ package com.example.videorecorder
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -29,13 +30,18 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.videorecorder.ui.theme.VideoRecorderTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -46,6 +52,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             VideoRecorderTheme {
+                val scope = rememberCoroutineScope()
                 val scaffoldState = rememberBottomSheetScaffoldState()
                 val controller = remember {
                     LifecycleCameraController(applicationContext).apply {
@@ -54,11 +61,17 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+
+                val viewModel = viewModel<MainViewModel>()
+                val bitmaps by viewModel.bitmaps.collectAsState()
                 BottomSheetScaffold(
                     scaffoldState = scaffoldState,
                     sheetPeekHeight = 0.dp,
                     sheetContent = {
-
+                        PhotoBottomSheetContent(
+                            bitmaps = bitmaps,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 ) { padding ->
                     Box(
@@ -91,7 +104,9 @@ class MainActivity : ComponentActivity() {
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
                             IconButton(onClick = {
-
+                                scope.launch {
+                                    scaffoldState.bottomSheetState.expand()
+                                }
                             }) {
                                 Icon(
                                     imageVector = Icons.Default.Photo,
@@ -99,6 +114,10 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             IconButton(onClick = {
+                                takePhoto(
+                                    controller = controller,
+                                    onPhotoTaken = viewModel::onTakePhoto
+                                )
 
                             }) {
                                 Icon(
@@ -122,7 +141,29 @@ class MainActivity : ComponentActivity() {
             object : OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
                     super.onCaptureSuccess(image)
-                    onPhotoTaken(image.toBitmap())
+                    /**
+                     * if the image is rotated the we need to check the rotation
+                     * with the matrix and fix the image rotation
+                     */
+                    /
+                    val matrix = Matrix().apply {
+                        postRotate(
+                            image.imageInfo.rotationDegrees.toFloat()
+                        )
+                        if (controller.cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+                            postScale(-1f, 1f)
+                        }
+                    }
+                    val rotatedBitmap = Bitmap.createBitmap(
+                        image.toBitmap(),
+                        0,
+                        0,
+                        image.width,
+                        image.height,
+                        matrix,
+                        true
+                    )
+                    onPhotoTaken(rotatedBitmap)
                 }
 
                 override fun onError(exception: ImageCaptureException) {
