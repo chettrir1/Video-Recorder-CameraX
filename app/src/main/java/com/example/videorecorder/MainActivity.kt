@@ -145,7 +145,6 @@ class MainActivity : ComponentActivity() {
                      * if the image is rotated the we need to check the rotation
                      * with the matrix and fix the image rotation
                      */
-                    /
                     val matrix = Matrix().apply {
                         postRotate(
                             image.imageInfo.rotationDegrees.toFloat()
